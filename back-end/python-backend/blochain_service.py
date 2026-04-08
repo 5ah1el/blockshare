@@ -13,18 +13,28 @@ account = Account.create()
 
 
 import json
+import os
+
+# Get the absolute path to the artifacts
+# __file__ is blockshare/back-end/python-backend/blochain_service.py
+# BASE_DIR should be blockshare/back-end
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ABI_PATH = os.path.join(BASE_DIR, 'blockchain-backend', 'artifacts', 'contracts', 'FileSharing.sol', 'FileSharing.json')
 
 # Load the ABI from the JSON file
-with open('BlockShare/back-end/blockchain-backend/artifacts/contracts/FileSharing.sol/FileSharing.json', 'r') as f:
-    contract_data = json.load(f)
-
-# Extract the ABI from the contract data
-contract_abi = contract_data['abi']
+if os.path.exists(ABI_PATH):
+    with open(ABI_PATH, 'r') as f:
+        contract_data = json.load(f)
+    contract_abi = contract_data['abi']
+else:
+    # Fallback or error if ABI not found (will be generated after npx hardhat compile)
+    contract_abi = []
+    print(f"Warning: ABI not found at {ABI_PATH}. Run 'npx hardhat compile' in blockchain-backend.")
 
 app = Flask(__name__)
 
-# Connect to the local Hardhat node
-w3 = Web3(Web3.HTTPProvider('http://127.0.0.1:8545'))
+# Connect to the local Ganache node (port 7545)
+w3 = Web3(Web3.HTTPProvider('http://127.0.0.1:7545'))
 
 # Load contract ABI and address
 contract_address = "0x5FbDB2315678afecb367f032d93F642f64180aa3"  # Update with your contract address

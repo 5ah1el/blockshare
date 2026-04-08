@@ -14,6 +14,19 @@ const UserService = {
         }
     },
 
+    updateUserAddress: async (userId, address) => {
+        try {
+            const response = await axios.post(`${BASE_API}/api/updateUserAddress`, {
+                userId,
+                address
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error updating user address:', error);
+            throw new Error('Failed to update user address');
+        }
+    },
+
 };
 
 export default UserService;

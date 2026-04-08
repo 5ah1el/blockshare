@@ -1,89 +1,79 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faFileUpload, faShareAlt, faDownload, faHistory, faFolder, faUserFriends, faHomeUser, faPlus, faImages, faGear, faUserEdit } from '@fortawesome/free-solid-svg-icons';
+import { faFileUpload, faShareAlt, faDownload, faHistory, faFolder, faUserFriends, faHomeUser, faPlus, faImages, faGear, faUserEdit, faCloud } from '@fortawesome/free-solid-svg-icons';
 
 const Sidebar = () => {
   const location = useLocation();
 
+  const menuItems = [
+    { path: '/app/dashboard/home', icon: faHomeUser, label: 'Home' },
+    { path: '/app/dashboard/files', icon: faFolder, label: 'My Files' },
+    { path: '/app/dashboard/photos', icon: faImages, label: 'My Photos' },
+    { path: '/app/dashboard/my-shared-files', icon: faShareAlt, label: 'Shared Files' },
+    { path: '/app/dashboard/shared-with-me', icon: faUserFriends, label: 'Shared with Me' },
+    { path: '/app/dashboard/recent', icon: faHistory, label: 'Recent' },
+    { path: '/app/dashboard/transaction', icon: faHistory, label: 'Transactions' },
+    { path: '/app/dashboard/settings', icon: faGear, label: 'Settings' },
+    { path: '/app/dashboard/profile', icon: faUserEdit, label: 'Profile' },
+  ];
+
   return (
-    <div className="bg-gray-900 h-screen w-64  flex-shrink-0">
-      <div>
-        <div className="text-white p-4 border-b border-gray-700">
-          <h1 className="text-2xl font-bold">BlockShare</h1>
+    <div className="bg-slate-900 h-screen w-64 flex-shrink-0 flex flex-col border-r border-slate-800 shadow-2xl z-20">
+      <div className="p-6 flex items-center space-x-3">
+        <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/20">
+          <FontAwesomeIcon icon={faCloud} className="text-white text-xl" />
         </div>
-        <ul className="mt-6">
+        <h1 className="text-xl font-bold text-white tracking-tight">BlockShare</h1>
+      </div>
+
+      <div className="px-4 mb-6">
         <Link to="/app/dashboard/upload">
-            <div className="text-black font-bold p-3 hover:bg-gray-700 cursor-pointer rounded-full flex items-center justify-center bg-white hover:bg-gray-200" >
-              <FontAwesomeIcon icon={faPlus} className="mr-2" />
-              Upload
+          <button className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl transition-all duration-200 flex items-center justify-center space-x-2 shadow-lg shadow-blue-900/40 active:scale-95 group">
+            <FontAwesomeIcon icon={faPlus} className="group-hover:rotate-90 transition-transform duration-300" />
+            <span>New Upload</span>
+          </button>
+        </Link>
+      </div>
+
+      <nav className="flex-grow px-4 overflow-y-auto custom-scrollbar space-y-1">
+        {menuItems.map((item) => {
+          const isActive = location.pathname === item.path;
+          return (
+            <Link key={item.path} to={item.path} className="block">
+              <div className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
+                isActive 
+                  ? 'bg-blue-600/10 text-blue-400 font-semibold' 
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+              }`}>
+                <FontAwesomeIcon icon={item.icon} className={`text-lg transition-transform duration-200 group-hover:scale-110 ${
+                  isActive ? 'text-blue-500' : 'text-slate-500'
+                }`} />
+                <span className="text-sm">{item.label}</span>
+                {isActive && (
+                  <div className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-500 shadow-lg shadow-blue-500/50"></div>
+                )}
+              </div>
+            </Link>
+          );
+        })}
+      </nav>
+
+      <div className="p-4 mt-auto">
+        <div className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700/50">
+          <div className="flex items-center space-x-3 mb-3">
+            <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs text-slate-300">
+              <FontAwesomeIcon icon={faCloud} />
             </div>
-          </Link>
-
-          <Link to="/app/dashboard/home">
-            <li className={`text-white p-4 my-3 cursor-pointer ${location.pathname === '/app/dashboard/home' ? 'bg-white text-black' : 'hover:bg-gray-700'}`}>
-              <FontAwesomeIcon icon={faHomeUser} className="mr-2" />
-              Home
-            </li>
-          </Link>
-
-          <Link to="/app/dashboard/files">
-            <li className={`text-white p-4 cursor-pointer ${location.pathname === '/app/dashboard/files' ? 'bg-white text-black' : 'hover:bg-gray-700'}`}>
-              <FontAwesomeIcon icon={faFolder} className="mr-2" />
-              My Files
-            </li>
-          </Link>
-
-          <Link to="/app/dashboard/photos">
-            <li className={`text-white p-4 cursor-pointer ${location.pathname === '/app/dashboard/photos' ? 'bg-white text-black' : 'hover:bg-gray-700'}`}>
-              <FontAwesomeIcon icon={faImages} className="mr-2" />
-              My Photos
-            </li>
-          </Link>
-          
-          <Link to="/app/dashboard/my-shared-files">
-            <li className={`text-white p-4 cursor-pointer ${location.pathname === '/app/dashboard/my-shared-files' ? 'bg-white text-black' : 'hover:bg-gray-700'}`}>
-              <FontAwesomeIcon icon={faShareAlt} className="mr-2" />
-              My Shared Files
-            </li>
-          </Link>
-
-          <Link to="/app/dashboard/shared-with-me">
-            <li className={`text-white p-4 cursor-pointer ${location.pathname === '/app/dashboard/shared-with-me' ? 'bg-white text-black' : 'hover:bg-gray-700'}`}>
-              <FontAwesomeIcon icon={faUserFriends} className="mr-2" />
-              Shared with Me
-            </li>
-          </Link>
-
-          <Link to="/app/dashboard/recent">
-            <li className={`text-white p-4 cursor-pointer ${location.pathname === '/app/dashboard/recent' ? 'bg-white text-black' : 'hover:bg-gray-700'}`}>
-              <FontAwesomeIcon icon={faHistory} className="mr-2" />
-              Recent Activities
-            </li>
-          </Link>
-
-          <Link to="/app/dashboard/transaction">
-            <li className={`text-white p-4 cursor-pointer ${location.pathname === '/app/dashboard/transaction' ? 'bg-white text-black' : 'hover:bg-gray-700'}`}>
-              <FontAwesomeIcon icon={faHistory} className="mr-2" />
-              Transaction History
-            </li>
-          </Link>
-
-          <Link to="/app/dashboard/settings">
-            <li className={`text-white p-4 cursor-pointer ${location.pathname === '/app/dashboard/settings' ? 'bg-white text-black' : 'hover:bg-gray-700'}`}>
-            <FontAwesomeIcon icon={faGear} className="mr-2" />
-              Settings
-            </li>
-          </Link>
-
-          <Link to="/app/dashboard/profile">
-            <li className={`text-white p-4 cursor-pointer ${location.pathname === '/app/dashboard/profile' ? 'bg-white text-black' : 'hover:bg-gray-700'}`}>
-            <FontAwesomeIcon icon={faUserEdit} className="mr-2" />
-              Profile
-            </li>
-          </Link>
-          {/* Add more sidebar items as needed */}
-        </ul>
+            <div className="text-xs">
+              <p className="text-slate-300 font-medium">Storage Used</p>
+              <p className="text-slate-500">75% of 1GB</p>
+            </div>
+          </div>
+          <div className="w-full bg-slate-700 rounded-full h-1.5">
+            <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: '75%' }}></div>
+          </div>
+        </div>
       </div>
     </div>
   );

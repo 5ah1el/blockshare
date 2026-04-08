@@ -6,19 +6,19 @@ import { Outlet } from 'react-router-dom';
 import Upload from './Upload';
 
 const Dashboard = () => {
-  
-
   return (
-    <div className="flex h-screen">
-  <Sidebar />
-  <div className="flex flex-col w-full">
-    <Navbar />
-    <div className="flex-grow p-6 overflow-y-auto">
-      {/* Content inside the main area */}
-      <Outlet />
+    <div className="flex h-screen bg-slate-50 overflow-hidden">
+      <Sidebar />
+      <div className="flex flex-col flex-grow relative">
+        <Navbar />
+        <main className="flex-grow p-8 overflow-y-auto custom-scrollbar">
+          <div className="max-w-screen-2xl mx-auto">
+            {/* Removed ErrorBoundary as it was for debugging */}
+            <Outlet />
+          </div>
+        </main>
+      </div>
     </div>
-  </div>
-</div>
   );
 };
 

@@ -58,5 +58,5 @@ class BlockchainRecord(db.Model):
     miner=db.Column(db.String(255), nullable=True)
 
     def __repr__(self):
-        return f'<BlockchainRecord file_id={self.file_id}, user_id={self.user_id}, shared_user_id={self.shared_user_id}>'
+        return f'<BlockchainRecord file_id={self.file_id}, user_id={self.user_id}, tx_hash={self.transaction_hash}>'
 

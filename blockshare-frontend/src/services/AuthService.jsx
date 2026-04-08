@@ -27,11 +27,8 @@ const AuthService = {
       });
         console.log('Signup response:', response)
       console.log('Signup response:', response.data)
-
-      
   
-    
-      return JSON.stringify(response);
+      return response.data;
 
     } catch (error) {
       throw error;

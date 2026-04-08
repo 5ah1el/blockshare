@@ -8,23 +8,12 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_mail import Mail, Message
 from werkzeug.utils import secure_filename
 from cryptography.fernet import Fernet
-from flask import jsonify
 import os
 import requests
 import base64
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
-from langchain.vectorstores import FAISS
-from langchain.chains.question_answering import load_qa_chain
-from langchain.prompts import PromptTemplate
-from PyPDF2 import PdfFileReader, PdfReader
-import google.generativeai as genai
 from dotenv import load_dotenv
-import os
-import base64
 
 load_dotenv()
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
 from blochain_service import contract,w3
 
@@ -99,6 +88,7 @@ class AccessControl(db.Model):
     recipientUserId = db.Column(db.Integer, db.ForeignKey('user.id'))
     access_level = db.Column(db.Enum('owner', 'read', 'write', 'download'))
     active = db.Column(db.Boolean)
+    blockchain_access_id = db.Column(db.Integer, nullable=True) # ID from smart contract
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -120,7 +110,7 @@ class BlockchainRecord(db.Model):
     miner=db.Column(db.String(255), nullable=True)
 
     def __repr__(self):
-        return f'<BlockchainRecord file_id={self.file_id}, user_id={self.user_id}, shared_user_id={self.shared_user_id}>'
+        return f'<BlockchainRecord file_id={self.file_id}, user_id={self.user_id}, tx_hash={self.transaction_hash}>'
 
 
 @app.route('/api/upload', methods=['POST'])
@@ -134,8 +124,19 @@ def upload_file():
     userId = request.form.get('userId')
     user_address = request.form.get('userAddress')
     
+    if not userId:
+        return jsonify({'error': 'userId is required'}), 400
+    if not user_address:
+        return jsonify({'error': 'userAddress is required (Connect MetaMask)'}), 400
+
+    try:
+        userId = int(userId)
+        user_address = w3.to_checksum_address(user_address)
+    except Exception as e:
+        return jsonify({'error': f'Invalid userId or userAddress: {str(e)}'}), 400
+
     if file.filename == '':
-        return jsonify({'error': 'No selected file'})
+        return jsonify({'error': 'No selected file'}), 400
 
     if file:
         filename = secure_filename(file.filename)
@@ -151,41 +152,105 @@ def upload_file():
         encrypted_data = cipher_suite.encrypt(file_data)
 
 
-        # Pin the encrypted file to Pinata
-        headers = {
-            'pinata_api_key': '17c77d008bc1cd3adef3',
-            'pinata_secret_api_key': '354b0d3623035dab594d7b8e5a47c0fc9adfc16a2d92f48a8f48f4fb29ddfb24'
-        }
+        # Upload the encrypted file to local IPFS node
         files = {
             'file': (filename, encrypted_data)
         }
-        response = requests.post('https://api.pinata.cloud/pinning/pinFileToIPFS', headers=headers, files=files)
-
-        
-
-        print(response.json())
-        if response.status_code == 200:
-            print(response.json())
-            filedata = File(filename=filename, size=len(file_data), file_hash=response.json().get('IpfsHash'), user_id=userId,file_content=encrypted_data,file_type=mime_type)
-            tx_hash = contract.functions.uploadFile(response.json().get('IpfsHash')).transact({'from': user_address})
-            tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
-
-            # Get the balance of the address after the transaction
-            balance_wei = w3.eth.get_balance(w3.to_checksum_address(user_address))
-            balance_eth = w3.from_wei(balance_wei, 'ether')
+        try:
+            # Local IPFS node default API port is 5001
+            response = requests.post('http://127.0.0.1:5001/api/v0/add', files=files)
             
-            # Get block data
-            block_data = w3.eth.get_block(tx_receipt.blockNumber)
-            print(block_data)
-            action="You uploaded a file"
-            blockchain_record= BlockchainRecord(file_id=response.json().get('IpfsHash'), user_id=userId, transaction_hash=tx_hash.hex(),from_address=user_address,to_address=user_address, block_number=tx_receipt.blockNumber, gas_used=tx_receipt.gasUsed, status='Success', balance_eth=balance_eth,action=action,miner=block_data.miner)
-            db.session.add(blockchain_record)
-
-            db.session.add(filedata)
-            db.session.commit()
-            return jsonify({'message': 'File uploaded and pinned successfully'})
+            if response.status_code == 200:
+                ipfs_data = response.json()
+                ipfs_hash = ipfs_data.get('Hash')
+                print(f"File uploaded to local IPFS: {ipfs_hash}")
+                
+                filedata = File(filename=filename, size=len(file_data), file_hash=ipfs_hash, user_id=userId, file_content=encrypted_data, file_type=mime_type)
+                db.session.add(filedata)
+                db.session.commit()
+                
+                return jsonify({
+                    'message': 'File uploaded to local IPFS successfully', 
+                    'ipfs_hash': ipfs_hash,
+                    'file_id': filedata.id
+                })
+            else:
+                return jsonify({'error': f'Failed to upload to local IPFS: {response.text}'}), 500
+        except Exception as e:
+            print(f"Error during file upload: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': f'Internal server error: {str(e)}'}), 500
 
     return jsonify({'error': 'Failed to upload and pin the file'})
+
+@app.route('/api/record-transaction', methods=['POST'])
+def record_transaction():
+    try:
+        db.create_all()
+        data = request.json
+        print(f"Recording transaction: {data}")
+        
+        userId = data.get('userId')
+        ipfs_hash = data.get('ipfs_hash')
+        tx_hash = data.get('tx_hash')
+        user_address = data.get('userAddress')
+        
+        if not all([userId, ipfs_hash, tx_hash, user_address]):
+            return jsonify({'error': 'Missing required transaction data'}), 400
+
+        # Ensure correct types and formats
+        userId = int(userId)
+        user_address = w3.to_checksum_address(user_address)
+        
+        # Get transaction receipt using the hash
+        tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+        
+        # Get balance and block data
+        balance_wei = w3.eth.get_balance(user_address)
+        balance_eth = str(w3.from_wei(balance_wei, 'ether'))
+        block_data = w3.eth.get_block(tx_receipt.blockNumber)
+        
+        blockchain_record = BlockchainRecord(
+            file_id=ipfs_hash, 
+            user_id=userId, 
+            transaction_hash=tx_hash,
+            from_address=user_address, 
+            to_address=user_address, 
+            block_number=tx_receipt.blockNumber, 
+            gas_used=tx_receipt.gasUsed, 
+            status='Success', 
+            balance_eth=balance_eth, 
+            action="You uploaded a file", 
+            miner=block_data.miner
+        )
+        
+        db.session.add(blockchain_record)
+        db.session.commit()
+        print(f"Transaction recorded successfully for user {userId}")
+        return jsonify({'message': 'Transaction recorded successfully'}), 200
+    except Exception as e:
+        print(f"Error recording transaction: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to record transaction: {str(e)}'}), 500
+
+@app.route('/api/record-revoke-transaction-local', methods=['POST'])
+def record_revoke_transaction_local():
+    try:
+        data = request.json
+        userId = data.get('userId')
+        fileId = data.get('fileId')
+        recipientId = data.get('recipientId')
+        
+        access_control = AccessControl.query.filter_by(file_id=fileId, recipientUserId=recipientId, active=True).first()
+        if access_control:
+            access_control.active = False
+            db.session.commit()
+            return jsonify({'message': 'Access revoked locally'}), 200
+        return jsonify({'error': 'No active share found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/getfiles/<string:user_id>', methods=['GET'])
 @cache.cached(timeout=1)  # Cache results for 60 seconds
@@ -200,7 +265,8 @@ def get_files(user_id):
         else:
             # Fetch encrypted file content from Pinata
             file_hash = file.file_hash
-            file_response = requests.get(f'https://cyan-general-otter-343.mypinata.cloud/ipfs/{file_hash}')
+            # Use local IPFS gateway instead of Pinata
+            file_response = requests.get(f'http://127.0.0.1:8080/ipfs/{file_hash}')
             if file_response.status_code == 200:
                 encrypted_data = file_response.content
             else:
@@ -225,29 +291,33 @@ def get_files(user_id):
 
 @app.route('/api/signup', methods=['POST'])
 def signup():
-    db.create_all()
-    data = request.json
-    username = data.get('username')
-    email = data.get('email')
-    password = data.get('password')
-    userdata = User(username=username, email=email, password=password)
-    user = User.query.filter_by(email=email, password=password).first()
-    if user:
-        return jsonify({'error': 'User already exists'})
-    
-    
+    try:
+        db.create_all()
+        data = request.json
+        username = data.get('username')
+        email = data.get('email')
+        password = data.get('password')
 
-    db.session.add(userdata)
-    db.session.commit()
+        if not all([username, email, password]):
+            return jsonify({'success': False, 'message': 'All fields are required'}), 400
 
-    response_data = {
-        'message': 'User added successfully',
-        
-    }
+        # Check if user already exists
+        existing_user = User.query.filter((User.username == username) | (User.email == email)).first()
+        if existing_user:
+            if existing_user.username == username:
+                return jsonify({'success': False, 'message': 'Username already exists'}), 400
+            else:
+                return jsonify({'success': False, 'message': 'Email already exists'}), 400
 
-    print(response_data)
+        new_user = User(username=username, email=email, password=password)
+        db.session.add(new_user)
+        db.session.commit()
 
-    return jsonify(response_data), 201
+        return jsonify({'success': True, 'message': 'User registered successfully'}), 201
+    except Exception as e:
+        db.session.rollback()
+        print(f"Signup error: {str(e)}")
+        return jsonify({'success': False, 'message': f'Internal server error: {str(e)}'}), 500
    
 
 @app.route('/api/login', methods=['POST'])
@@ -281,74 +351,115 @@ def login():
     
 @app.route('/api/sharefile', methods=['POST'])
 def share_file():
-    # db.create_all()  # Avoid calling create_all() in each request
     data = request.json
     file_hash = data.get('file_hash')
     recipient_username = data.get('recipientUsername')
     sender_user_id = data.get('senderUserId')
     access_level = data.get('accessLevel')
-    my_blockchain_address = data.get('myAddress')
-
-    print(access_level)
 
     # Check if the file exists
     file = File.query.filter_by(file_hash=file_hash).first()
     if not file:
-        return jsonify({'error': 'File not found'})
+        return jsonify({'error': 'File not found'}), 404
 
     # Check if the recipient user exists
     recipient_user = User.query.filter_by(username=recipient_username).first()
     sender_user_name = User.query.filter_by(id=sender_user_id).first()
 
-    if recipient_user:
-        recipient_email = recipient_user.email
-   
-        msg = Message('File Shared with You',
-              sender=('BlockShare SuperAdmin', app.config['MAIL_USERNAME']),
-              recipients=[recipient_email])
-        msg.body = f'Hi {recipient_user.username},\n\n{sender_user_name.username} has shared a file with you with the following access level:\n\n{access_level}.\n\nBest regards,\nBlockShare SuperAdmin'
-
-        mail.send(msg)
-
+    if not recipient_user:
+        return jsonify({'error': 'Recipient user not found'}), 404
+    if not sender_user_name:
+        return jsonify({'error': 'Sender user not found'}), 404
 
     user_blockchain_address = recipient_user.account_address
-    if not recipient_user:
-        return jsonify({'error': 'Recipient user not found'})
+    if not user_blockchain_address:
+        return jsonify({'error': 'Recipient user has not connected a MetaMask wallet yet'}), 400
 
-    # Check if the file is already in the access control list
-    access_control = AccessControl.query.filter_by(file_id=file.id, recipientUserId=recipient_user.id).first()
-    if access_control:
-        # If the file is already in the access control list, update its active status
-        access_control.active = True
-        access_control.access_level = access_level
-    else:
-        # If the file is not in the access control list, create a new access control entry
-        access_control = AccessControl(
-            file_id=file.id,
-            recipientUserId=recipient_user.id,
-            senderUserId=sender_user_id,
-            access_level=access_level,
-            active=True
-        )
-        tx_hash = contract.functions.shareFile(user_blockchain_address,file_hash).transact({'from': my_blockchain_address})
+    return jsonify({
+        'success': True,
+        'recipient_address': user_blockchain_address,
+        'recipient_id': recipient_user.id,
+        'file_id': file.id
+    })
+
+@app.route('/api/record-share-transaction', methods=['POST'])
+def record_share_transaction():
+    try:
+        db.create_all()
+        data = request.json
+        print(f"Recording share transaction: {data}")
+        
+        userId = data.get('userId')
+        file_hash = data.get('file_hash')
+        tx_hash = data.get('tx_hash')
+        sender_address = data.get('senderAddress')
+        recipient_address = data.get('recipientAddress')
+        recipient_id = data.get('recipientId')
+        file_id = data.get('file_id')
+        access_level = data.get('accessLevel')
+        blockchain_access_id = data.get('blockchainAccessId')
+        
+        if not all([userId, file_hash, tx_hash, sender_address, recipient_address, recipient_id, file_id, access_level]):
+            return jsonify({'error': 'Missing required share transaction data'}), 400
+
+        # Ensure correct types and formats (checksum addresses)
+        userId = int(userId)
+        recipient_id = int(recipient_id)
+        file_id = int(file_id)
+        blockchain_access_id = int(blockchain_access_id) if blockchain_access_id is not None else None
+        sender_address = w3.to_checksum_address(sender_address)
+        recipient_address = w3.to_checksum_address(recipient_address)
+        
+        # Get transaction receipt using the hash
         tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
-
-        print(tx_receipt)
-
-            # Get the balance of the address after the transaction
-        balance_wei = w3.eth.get_balance(w3.to_checksum_address(my_blockchain_address))
-        balance_eth = w3.from_wei(balance_wei, 'ether')
-            
-            # Get block data
+        
+        # Get balance and block data
+        balance_wei = w3.eth.get_balance(sender_address)
+        balance_eth = str(w3.from_wei(balance_wei, 'ether'))
         block_data = w3.eth.get_block(tx_receipt.blockNumber)
-        action="You shared a file to "+recipient_username+" with access level "+access_level+" "
-        blockchain_record= BlockchainRecord(file_id=file_hash, user_id=sender_user_id, transaction_hash=tx_hash.hex(),from_address=my_blockchain_address,to_address=user_blockchain_address, block_number=tx_receipt.blockNumber, gas_used=tx_receipt.gasUsed, status='Success', balance_eth=balance_eth,action=action,miner=block_data.miner)
+        
+        # Record in AccessControl
+        access_control = AccessControl.query.filter_by(file_id=file_id, recipientUserId=recipient_id).first()
+        if access_control:
+            access_control.active = True
+            access_control.access_level = access_level
+            access_control.blockchain_access_id = blockchain_access_id
+        else:
+            access_control = AccessControl(
+                file_id=file_id,
+                recipientUserId=recipient_id,
+                senderUserId=userId,
+                access_level=access_level,
+                active=True,
+                blockchain_access_id=blockchain_access_id
+            )
+            db.session.add(access_control)
+
+        # Record in BlockchainRecord
+        recipient_user = User.query.filter_by(id=recipient_id).first()
+        blockchain_record = BlockchainRecord(
+            file_id=file_hash, 
+            user_id=userId, 
+            transaction_hash=tx_hash,
+            from_address=sender_address, 
+            to_address=recipient_address, 
+            block_number=tx_receipt.blockNumber, 
+            gas_used=tx_receipt.gasUsed, 
+            status='Success', 
+            balance_eth=balance_eth, 
+            action=f"You shared a file to {recipient_user.username} with access level {access_level}", 
+            miner=block_data.miner
+        )
+        
         db.session.add(blockchain_record)
-        db.session.add(access_control)
-
-    db.session.commit()
-
-    return jsonify({'message': 'File shared successfully'})
+        db.session.commit()
+        print(f"Share transaction recorded successfully for user {userId} sharing with {recipient_id}")
+        return jsonify({'message': 'Share transaction recorded successfully'}), 200
+    except Exception as e:
+        print(f"Error recording share transaction: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to record share transaction: {str(e)}'}), 500
 
 @app.route('/api/getsharedfiles/<string:user_id>', methods=['GET'])
 def get_shared_files(user_id):
@@ -365,7 +476,8 @@ def get_shared_files(user_id):
         else:
             # Fetch encrypted file content from Pinata
             file_hash = file.file_hash
-            file_response = requests.get(f'https://cyan-general-otter-343.mypinata.cloud/ipfs/{file_hash}')
+            # Fetch encrypted file content from local IPFS gateway
+            file_response = requests.get(f'http://127.0.0.1:8080/ipfs/{file_hash}')
 
             if file_response.status_code == 200:
                 encrypted_data = file_response.content
@@ -413,8 +525,8 @@ def shared_with_me(user_id):
             encrypted_data = file.file_content
             file_type = file.file_type
         else:
-            # Fetch encrypted file content from Pinata
-            file_response = requests.get(f'https://cyan-general-otter-343.mypinata.cloud/ipfs/{hash}')
+            # Fetch encrypted file content from local IPFS gateway
+            file_response = requests.get(f'http://127.0.0.1:8080/ipfs/{hash}')
 
             if file_response.status_code == 200:
                 encrypted_data = file_response.content
@@ -448,42 +560,99 @@ def shared_with_me(user_id):
     
 @app.route('/api/revokeaccess', methods=['POST'])
 def revoke_access():
-    db.create_all()
     data = request.json
     file_id = data.get('file_id')
     recipient_username = data.get('recipient_username')
     recipientUser = User.query.filter_by(username=recipient_username).first()
     if not recipientUser:
-        return jsonify({'error': 'User not found'})
+        return jsonify({'error': 'Recipient user not found'}), 404
     
     recipientUserId = recipientUser.id
 
-    print(file_id, recipientUserId)
-
     access_control = AccessControl.query.filter_by(file_id=file_id, recipientUserId=recipientUserId, active=True).first()
     if not access_control:
-        return jsonify({'error': 'No access control found'})
+        return jsonify({'error': 'No active access control found for this user and file'}), 404
     
-    mydata= User.query.filter_by(id=access_control.senderUserId).first()
-    userdata= User.query.filter_by(id=recipientUserId).first()
-    myfiledata= File.query.filter_by(id=file_id).first()
-    access_control.active = False
-    tx_hash = contract.functions.revokeAccess(recipientUserId).transact({'from': mydata.account_address})
-    tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
-    balance_wei = w3.eth.get_balance(w3.to_checksum_address(mydata.account_address  ))
-    balance_eth = w3.from_wei(balance_wei, 'ether')
+    recipient_blockchain_address = recipientUser.account_address
+    if not recipient_blockchain_address:
+        return jsonify({'error': 'Recipient user has no blockchain address'}), 400
 
+    return jsonify({
+        'success': True,
+        'recipient_id': recipientUserId,
+        'recipient_address': recipient_blockchain_address,
+        'blockchain_access_id': access_control.blockchain_access_id
+    })
+
+@app.route('/api/record-revoke-transaction', methods=['POST'])
+def record_revoke_transaction():
+    try:
+        db.create_all()
+        data = request.json
+        
+        userId = data.get('userId')
+        file_id = data.get('fileId')
+        tx_hash = data.get('tx_hash')
+        sender_address = data.get('senderAddress')
+        recipient_address = data.get('recipientAddress')
+        recipient_id = data.get('recipientId')
+        
+        # Get transaction receipt using the hash
+        tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+        
+        # Get balance and block data
+        balance_wei = w3.eth.get_balance(sender_address)
+        balance_eth = str(w3.from_wei(balance_wei, 'ether'))
+        block_data = w3.eth.get_block(tx_receipt.blockNumber)
+        
+        # Update AccessControl
+        access_control = AccessControl.query.filter_by(file_id=file_id, recipientUserId=recipient_id, active=True).first()
+        if access_control:
+            access_control.active = False
+        
+        # Record in BlockchainRecord
+        recipient_user = User.query.filter_by(id=recipient_id).first()
+        myfiledata = File.query.filter_by(id=file_id).first()
+        
+        blockchain_record = BlockchainRecord(
+            file_id=myfiledata.file_hash, 
+            user_id=userId, 
+            transaction_hash=tx_hash,
+            from_address=sender_address, 
+            to_address=recipient_address, 
+            block_number=tx_receipt.blockNumber, 
+            gas_used=tx_receipt.gasUsed, 
+            status='Success', 
+            balance_eth=balance_eth, 
+            action=f"You revoked access to {recipient_user.username}", 
+            miner=block_data.miner
+        )
+        
+        db.session.add(blockchain_record)
+        db.session.commit()
+        return jsonify({'message': 'Revoke transaction recorded successfully'}), 200
+    except Exception as e:
+        print(f"Error recording revoke transaction: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to record revoke transaction: {str(e)}'}), 500
+
+@app.route('/api/updateUserAddress', methods=['POST'])
+def update_user_address():
+    data = request.json
+    user_id = data.get('userId')
+    address = data.get('address')
     
-            
-            # Get block data
-    block_data = w3.eth.get_block(tx_receipt.blockNumber)
-    action="You revoked access to "+recipient_username
-    blockchain_record= BlockchainRecord(file_id=myfiledata.file_hash, user_id=access_control.senderUserId, transaction_hash=tx_hash.hex(),from_address=mydata.account_address,to_address=userdata.account_address, block_number=tx_receipt.blockNumber, gas_used=tx_receipt.gasUsed, status='Success', balance_eth=balance_eth,action=action,miner=block_data.miner)
-
-    db.session.add(blockchain_record)
+    if not user_id or not address:
+        return jsonify({'error': 'userId and address are required'}), 400
+        
+    user = User.query.filter_by(id=user_id).first()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+        
+    user.account_address = address
     db.session.commit()
-
-    return jsonify({'message': 'Access revoked successfully'})
+    return jsonify({'success': True, 'message': 'Address updated successfully'}), 200
 
 @app.route('/api/getUser', methods=['GET'])
 def get_user():
@@ -543,82 +712,22 @@ def getBlockChainData(user_id):
         return jsonify({'error': 'No blockchain records found'})
     
 
-UPLOAD_FOLDER = 'BlockShare/back-end/python-backend/'
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
-def get_pdf_text(pdf_path):
-    text = ""
-    pdf_reader = PdfReader(pdf_path)
-    for page in pdf_reader.pages:
-        text += page.extract_text()
-    return text
-
-def get_text_chunks(text):
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=100000, chunk_overlap=10000)
-    chunks = text_splitter.split_text(text)
-    return chunks
-
-def get_vector_store(text_chunks):
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-    vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
-    vector_store.save_local("faiss_index")
-
-def get_conversational_chain():
-    prompt_template = """
-    Answer the question as detailed as possible from the provided context, make sure to provide all the details, don't provide the wrong answer\n\n
-    Context:\n {context}?\n
-    Question: \n{question}\n
-
-    Answer:
-    """
-
-    model = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0.3)
-
-    prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
-    chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
-
-    return chain
-
-def user_input(user_question):
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-    new_db = FAISS.load_local("faiss_index", embeddings)
-    docs = new_db.similarity_search(user_question)
-
-    chain = get_conversational_chain()
-
-    response = chain({"input_documents": docs, "question": user_question}, return_only_outputs=True)
-    return response["output_text"]
-
-@app.route('/api/process', methods=['POST'])
-def process():
-    user_question = request.form['user_question']
-    print(user_question)
-
-    pdf_content = request.form['pdf_content']
-    decoded_data = base64.b64decode(pdf_content)
-
-    filename = f"{user_question[:3]}_file.pdf"  # Example: Take the first 3 characters of the question
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-
-    # Write the decoded PDF content to a file
-    with open(file_path, 'wb') as file:
-        file.write(decoded_data)
-
-    # Extract text from the PDF file
-    raw_text = get_pdf_text(file_path)
-    text_chunks = get_text_chunks(raw_text)
-    get_vector_store(text_chunks)
-
-    result = user_input(user_question)
-
-    os.remove(file_path)
-
-    print("File saved successfully:", filename)
-    print("Result:", result)
-
-    return jsonify({'result': result})
-
-    
 if __name__ == '__main__':
+    with app.app_context():
+        # Check if blockchain_access_id column exists
+        from sqlalchemy import inspect
+        inspector = inspect(db.engine)
+        try:
+            columns = [c['name'] for c in inspector.get_columns('access_control')]
+            if 'blockchain_access_id' not in columns:
+                print("Adding blockchain_access_id column to access_control table...")
+                with db.engine.connect() as conn:
+                    conn.execute(db.text('ALTER TABLE access_control ADD COLUMN blockchain_access_id INTEGER'))
+                    conn.commit()
+                print("Column added successfully.")
+        except Exception:
+            # Table might not exist yet
+            pass
+        
+        db.create_all()
     app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)
-    db.create_all()

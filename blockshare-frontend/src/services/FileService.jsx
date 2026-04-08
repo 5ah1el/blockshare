@@ -37,24 +37,37 @@ const FileService = {
     // Add a new function to share a file
     shareFile: async (file_hash, userId, recipientUsername, accessControl) => {
         try {
-           
-
-    
             const response = await axios.post(`${BASE_API}/api/sharefile`, {
                 file_hash: file_hash,
                 senderUserId: userId,
                 recipientUsername: recipientUsername,
-                accessLevel: accessControl,
-                myAddress: localStorage.getItem('ethereum_address')
-                
+                accessLevel: accessControl
             });
     
-            alert('File shared successfully'); // Alert the user about successful sharing
-    
-            return response.data; // If needed, handle the response from the server
+            return response.data; // Return the data needed for frontend transaction
         } catch (error) {
             console.error('Error sharing file:', error);
-            throw new Error('File sharing failed'); // You can customize the error handling
+            throw new Error(error.response?.data?.error || error.message || 'File sharing failed');
+        }
+    },
+
+    recordShareTransaction: async (userId, fileHash, txHash, senderAddress, recipientAddress, recipientId, fileId, accessLevel, blockchainAccessId) => {
+        try {
+            const response = await axios.post(`${BASE_API}/api/record-share-transaction`, {
+                userId,
+                file_hash: fileHash,
+                tx_hash: txHash,
+                senderAddress,
+                recipientAddress,
+                recipientId,
+                file_id: fileId,
+                accessLevel,
+                blockchainAccessId
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error recording share transaction:', error);
+            throw new Error('Failed to record share transaction in DB');
         }
     },
 
@@ -79,18 +92,49 @@ const FileService = {
         }
     },
 
-    revokeAccess : async (fileId, recipient_username) => {
-      try {
-          const response = await axios.post(`${BASE_API}/api/revokeaccess`, {
-              file_id: fileId,
-              recipient_username: recipient_username
-          });
-          console.log('Access revoked successfully:', response.data);
-          // Optionally, you can update your component state or perform any necessary actions after revoking access
-      } catch (error) {
-          console.error('Error revoking access:', error.response.data);
-          // Handle errors here
-      }
+    // Function to revoke access for a file
+    revokeAccess: async (fileId, recipient_username) => {
+        try {
+            const response = await axios.post(`${BASE_API}/api/revokeaccess`, {
+                file_id: fileId,
+                recipient_username: recipient_username
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error revoking access:', error);
+            throw new Error(error.response?.data?.error || error.message || 'Failed to revoke access');
+        }
+    },
+
+    recordRevokeTransaction: async (userId, fileId, txHash, senderAddress, recipientAddress, recipientId) => {
+        try {
+            const response = await axios.post(`${BASE_API}/api/record-revoke-transaction`, {
+                userId,
+                fileId,
+                tx_hash: txHash,
+                senderAddress,
+                recipientAddress,
+                recipientId
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error recording revoke transaction:', error);
+            throw new Error('Failed to record revoke transaction in DB');
+        }
+    },
+
+    recordRevokeTransactionLocal: async (userId, fileId, recipientId) => {
+        try {
+            const response = await axios.post(`${BASE_API}/api/record-revoke-transaction-local`, {
+                userId,
+                fileId,
+                recipientId
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error recording local revoke:', error);
+            throw new Error('Failed to record local revoke in DB');
+        }
     },
 
       deleteFile: async (file_id) => {
@@ -101,7 +145,7 @@ const FileService = {
             console.log('File deleted successfully:', response.data);
             // Optionally, you can update your component state or perform any necessary actions after deleting the file
         } catch (error) {
-            console.error('Error deleting file:', error.response.data);
+            console.error('Error deleting file:', error.response?.data || error.message);
             // Handle errors here
         }
     },

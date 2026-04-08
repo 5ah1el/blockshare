@@ -33,9 +33,9 @@ function App() {
 
               <Route path='dashboard' element={<Dashboard />}>
 
-                <Route path='welcome' element={<Welcome />} />
-                <Route index='home' element={<Home />} />
+                <Route index element={<Home />} />
                 <Route path='home' element={<Home />} />
+                <Route path='welcome' element={<Welcome />} />
                 <Route path='upload' element={<Upload />} />
                 <Route path='files' element={<Files />} />
                 <Route path='photos' element={<Photos />} />

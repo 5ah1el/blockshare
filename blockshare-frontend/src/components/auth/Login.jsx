@@ -11,22 +11,26 @@ const SignupModal = ({ onClose }) => {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const handleSignup = async () => {
+        if (!username || !email || !password) {
+            alert('Please fill in all fields');
+            return;
+        }
+
         try {
-            // Call the AuthService.signup() method and wait for the response
+            setLoading(true);
             const response = await AuthService.signup(username, email, password);
     
-            // Check if the signup was successful
-            if (response) {
-                alert('Signup successful');
-                console.log('Signup successful:');
-                // Handle successful signup, e.g., redirect to another page
+            if (response && response.success) {
+                alert('Signup successful! You can now log in.');
+                onClose();
             } else {
-                console.error('Signup failed:', response.data.error);
-                // Handle failed signup, e.g., display error message to the user
+                alert('Signup failed: ' + (response?.message || 'Unknown error'));
             }
         } catch (error) {
-            console.error('Signup error:');
-            // Handle error, e.g., display error message to the user
+            console.error('Signup error:', error);
+            alert('An error occurred during signup. Please try again.');
+        } finally {
+            setLoading(false);
         }
     };
     
@@ -99,7 +103,13 @@ const Login = () => {
     const [loading, setLoading] = useState(false);
     const [showSignupModal, setShowSignupModal] = useState(false);
     const navigate = useNavigate();
-    const { login } = useAuth();
+    const { login, isLoggedIn } = useAuth();
+
+    React.useEffect(() => {
+        if (isLoggedIn) {
+            navigate('/app/dashboard/home');
+        }
+    }, [isLoggedIn, navigate]);
 
     const handleLogin = async () => {
         try {

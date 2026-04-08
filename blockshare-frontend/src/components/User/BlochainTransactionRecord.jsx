@@ -8,12 +8,12 @@ export default function BlockchainTransactionRecord() {
     const [error, setError] = useState(null);
 
     const { user } = useAuth();
-    const userId = user.id;
 
     useEffect(() => {
         const fetchBlockData = async () => {
             try {
-                const response = await BlockchainService.getBlock(userId);
+                if (!user?.id) return; // Ensure user and its id exist before fetching
+                const response = await BlockchainService.getBlock(user.id);
                 console.log('Block data:', response.data);
                 setBlockData(response.data);
                 setLoading(false);
@@ -23,13 +23,13 @@ export default function BlockchainTransactionRecord() {
             }
         };
 
-        fetchBlockData();
+        if (user?.id) fetchBlockData(); // Only fetch if user.id is available
 
         // Cleanup function
         return () => {
             // Perform cleanup if needed
         };
-    }, [userId]); 
+    }, [user?.id]); 
 
     if (loading) {
         return <div className="flex justify-center items-center h-screen">Loading...</div>;
