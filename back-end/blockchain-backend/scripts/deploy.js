@@ -7,22 +7,18 @@
 const hre = require("hardhat");
 
 async function main() {
-  const currentTimestampInSeconds = Math.round(Date.now() / 1000);
-  const unlockTime = currentTimestampInSeconds + 60;
-
-  const lockedAmount = hre.ethers.parseEther("0.001");
-
-  const lock = await hre.ethers.deployContract("FileSharing", {
-    value: lockedAmount,
-  });
-
-  await lock.waitForDeployment();
-
-  console.log(
-    `Lock with ${ethers.formatEther(
-      lockedAmount
-    )}ETH and unlock timestamp ${unlockTime} deployed to ${lock.target}`
-  );
+  console.log("Deploying FileSharing contract...");
+  
+  const FileSharing = await hre.ethers.deployContract("FileSharing");
+  
+  await FileSharing.waitForDeployment();
+  
+  const contractAddress = await FileSharing.getAddress();
+  
+  console.log("FileSharing contract deployed to:", contractAddress);
+  console.log("\nIMPORTANT: Update this contract address in:");
+  console.log("1. blockshare-frontend/src/services/BlockchainService.jsx (CONTRACT_ADDRESS)");
+  console.log("2. back-end/python-backend/blochain_service.py (contract_address)");
 }
 
 // We recommend this pattern to be able to use async/await everywhere

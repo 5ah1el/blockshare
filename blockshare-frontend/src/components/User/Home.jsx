@@ -86,32 +86,49 @@ export default function Home() {
                 ))}
             </div>
 
-            {/* Group Attribution Section */}
-            <div className="bg-slate-900 rounded-[2.5rem] p-10 text-white relative overflow-hidden">
-                <div className="flex flex-col lg:flex-row justify-between items-center gap-8 relative z-10">
-                    <div className="text-center lg:text-left">
-                        <p className="text-blue-400 font-black tracking-widest uppercase text-[10px] mb-3">Engineering the Future</p>
+            {/* Team Members Section */}
+            <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-[2.5rem] p-10 lg:p-12 text-white relative overflow-hidden">
+                <div className="relative z-10">
+                    <div className="text-center mb-10">
+                        <p className="text-blue-400 font-black tracking-widest uppercase text-[10px] mb-3">The Minds Behind BlockShare</p>
                         <h2 className="text-3xl lg:text-4xl font-black mb-3 tracking-tight">
-                            Innovating Decentralized <br/> 
-                            Storage Solutions
+                            Meet Our Team
                         </h2>
+                        <p className="text-slate-400 font-medium max-w-2xl mx-auto">
+                            Group no. 33 - Innovating decentralized storage solutions for the future
+                        </p>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                        {[
+                            { name: 'Seemi', role: 'Team Member', color: 'from-blue-500 to-indigo-600' },
+                            { name: 'Sahiel', role: 'Team Member', color: 'from-emerald-500 to-teal-600' },
+                            { name: 'Jayesh', role: 'Team Member', color: 'from-purple-500 to-pink-600' },
+                            { name: 'Aarati', role: 'Team Member', color: 'from-orange-500 to-red-600' }
+                        ].map((member, idx) => (
+                            <div key={idx} className="group bg-white/5 backdrop-blur-sm border border-white/10 rounded-3xl p-6 hover:bg-white/10 hover:border-white/20 transition-all hover:-translate-y-1">
+                                <div className={`w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br ${member.color} flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform`}>
+                                    <span className="text-2xl font-black text-white">
+                                        {member.name.charAt(0)}
+                                    </span>
+                                </div>
+                                <h3 className="text-xl font-bold text-center mb-1">{member.name}</h3>
+                                <p className="text-sm text-slate-400 text-center font-medium">{member.role}</p>
+                            </div>
+                        ))}
+                    </div>
+                    
+                    <div className="mt-10 text-center">
                         <div className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-500/10 rounded-full border border-blue-500/20">
                             <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
                             <span className="text-sm font-bold text-blue-300">Proudly presented by Group no. 33</span>
                         </div>
                     </div>
-                    <div className="flex gap-12 text-center">
-                        <div>
-                            <p className="text-4xl font-black text-blue-400 mb-1">0.00</p>
-                            <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Files Stored</p>
-                        </div>
-                        <div className="w-px h-12 bg-slate-800 self-center"></div>
-                        <div>
-                            <p className="text-4xl font-black text-indigo-400 mb-1">0.00</p>
-                            <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Active Shares</p>
-                        </div>
-                    </div>
                 </div>
+                
+                {/* Decorative Elements */}
+                <div className="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl"></div>
+                <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl"></div>
             </div>
         </div>
     );

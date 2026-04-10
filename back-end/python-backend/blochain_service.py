@@ -49,9 +49,11 @@ contract = w3.eth.contract(address=contract_address, abi=contract_abi)
 def add_file():
     user_address = request.json.get('user_address')
     file_url = request.json.get('file_url')
+    file_name = request.json.get('file_name', 'Unknown')
+    file_size = request.json.get('file_size', 0)
 
     # Send transaction to upload file
-    tx_hash = contract.functions.uploadFile(file_url).transact({'from': w3.to_checksum_address(user_address)})
+    tx_hash = contract.functions.uploadFile(file_url, file_name, file_size).transact({'from': w3.to_checksum_address(user_address)})
     tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
 
     # Get transaction details
@@ -71,7 +73,7 @@ def add_file():
     gas_price_wei = w3.eth.gas_price
 
 # Gas used for the transaction
-    gas_used = tx_receipt.gas_used
+    gas_used = tx_receipt.gasUsed
 
 # Convert gas price to Ether
     gas_price_eth = w3.from_wei(gas_price_wei, 'ether')
@@ -104,13 +106,17 @@ def add_file():
 
 @app.route('/grant-access', methods=['POST'])
 def grant_access():
-    user_address = request.json.get('user_address')
+    data = request.json
+    sender_address = data.get('sender_address')
+    recipient_address = data.get('recipient_address')
+    file_hash = data.get('file_hash')
 
-    # Convert user_address to checksum format
-    checksum_address = Web3.to_checksum_address(user_address)
+    # Convert addresses to checksum format
+    checksum_sender = Web3.to_checksum_address(sender_address)
+    checksum_recipient = Web3.to_checksum_address(recipient_address)
 
-    # Send transaction to grant access
-    tx_hash = contract.functions.allow(checksum_address).transact({'from': checksum_address})
+    # Send transaction to share file
+    tx_hash = contract.functions.shareFile(checksum_recipient, file_hash).transact({'from': checksum_sender})
     tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
 
     # Extract transaction details
@@ -118,7 +124,6 @@ def grant_access():
         'transaction_hash': tx_hash.hex(),
         'block_number': tx_receipt.blockNumber,
         'gas_used': tx_receipt.gasUsed
-        # Add more details as needed
     }
 
     return jsonify({'message': 'Access granted successfully', 'transaction_details': transaction_details}), 200
@@ -127,15 +132,18 @@ def grant_access():
 
 @app.route('/revoke-access', methods=['POST'])
 def revoke_access():
-    user_address = request.json.get('user_address')
-    tx_hash = contract.functions.disallow(user_address).transact({'from': user_address})
+    data = request.json
+    access_id = data.get('access_id')
+    user_address = data.get('user_address')
+    
+    checksum_address = Web3.to_checksum_address(user_address)
+    tx_hash = contract.functions.revokeAccess(access_id).transact({'from': checksum_address})
     tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
 
     transaction_details = {
         'transaction_hash': tx_hash.hex(),
         'block_number': tx_receipt.blockNumber,
         'gas_used': tx_receipt.gasUsed
-        # Add more details as needed
     }
 
     return jsonify({'message': 'Access revoked successfully', 'transaction_details': transaction_details}), 200
@@ -147,9 +155,22 @@ def display_files():
     user_address = request.args.get('user_address')
     user_address = to_checksum_address(user_address)
 
-    print(user_address)
-
-    files = contract.functions.display(user_address).call()
+    # Get file uploads count
+    uploads_count = contract.functions.fileUploadsCount().call()
+    
+    files = []
+    for i in range(uploads_count):
+        file_upload = contract.functions.fileUploads(i).call()
+        if file_upload[0] == user_address:  # Check if uploader matches
+            files.append({
+                'id': i,
+                'uploader': file_upload[0],
+                'fileHash': file_upload[1],
+                'fileName': file_upload[2],
+                'fileSize': file_upload[3],
+                'uploaded': file_upload[4],
+                'timestamp': file_upload[5]
+            })
 
     return jsonify({'message': 'Files displayed successfully', 'files': files}), 200
 
@@ -157,9 +178,25 @@ def display_files():
 
 @app.route('/shared-access', methods=['GET'])
 def shared_access():
-    access_list = contract.functions.shareAccess.__call__().call()
-
-
+    user_address = request.args.get('user_address')
+    user_address = to_checksum_address(user_address)
+    
+    # Get access records count
+    records_count = contract.functions.accessRecordsCount().call()
+    
+    access_list = []
+    for i in range(records_count):
+        record = contract.functions.accessRecords(i).call()
+        if record[1] == user_address:  # Check if recipient matches
+            access_list.append({
+                'id': i,
+                'sender': record[0],
+                'recipient': record[1],
+                'fileHash': record[2],
+                'shared': record[3],
+                'revoked': record[4],
+                'timestamp': record[5]
+            })
 
     return jsonify({'message': 'Shared access retrieved successfully', 'access_list': access_list}), 200
 

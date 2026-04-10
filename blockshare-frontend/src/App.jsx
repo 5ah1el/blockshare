@@ -1,5 +1,5 @@
-
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { ToastProvider } from './context/ToastContext';
 
 import Login from './components/auth/Login';
 import Dashboard from './components/User/Dashboard';
@@ -13,7 +13,6 @@ import Upload from './components/User/Upload';
 import Home from './components/User/Home';
 import RecentActivities from './components/User/RecentActivities';
 import BlochainTransactionRecord from './components/User/BlochainTransactionRecord';
-import Setting from './components/User/Setting';
 import Profile from './components/User/Profile';
 
 
@@ -24,8 +23,9 @@ function App() {
 
   return (
     <div>
-      <Router>
-        <Routes>
+      <ToastProvider>
+        <Router>
+          <Routes>
           
           <Route path='/' element={<Login />} />
 
@@ -43,7 +43,6 @@ function App() {
                 <Route path='shared-with-me' element={<SharedWithMe />} />
                 <Route path='recent' element={<RecentActivities />} />
                 <Route path='transaction' element={<BlochainTransactionRecord />} />
-                <Route path='settings' element={<Setting />} />
                 <Route path='profile' element={<Profile />} />
 
 
@@ -55,10 +54,8 @@ function App() {
 
           <Route path='*' element={<Login />} />
         </Routes>
-
       </Router>
-  
-
+      </ToastProvider>
     </div>
   )
 }

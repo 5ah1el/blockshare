@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import FileService from '../../services/FileService';
 import BlockchainService from '../../services/BlockchainService';
+import { useToast } from '../../context/ToastContext';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faDownload, faShare, faInfoCircle, faEye, faRobot, faCloudArrowDown, faMessage, faTrash, faFolderOpen, faPlus } from '@fortawesome/free-solid-svg-icons';
 
@@ -9,11 +11,30 @@ import ShareModal from './Modals/ShareModal';
 
 const Files = () => {
     const [files, setFiles] = useState([]);
+    const [filteredFiles, setFilteredFiles] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [sharingFileId, setSharingFileId] = useState(null);
     const [selectedFile, setSelectedFile] = useState(null);
+    const { success, error, warning } = useToast();
     const userData = JSON.parse(localStorage.getItem('user'));
+    
+    // Listen for global search events
+    const [searchQuery, setSearchQuery] = useState('');
+    
+    useEffect(() => {
+        const handleSearch = (e) => {
+            setSearchQuery(e.detail || '');
+        };
+        
+        window.addEventListener('globalSearch', handleSearch);
+        return () => window.removeEventListener('globalSearch', handleSearch);
+    }, []);
+    
+    // Helper to refresh notifications
+    const refreshNotifications = () => {
+        window.dispatchEvent(new Event('storage'));
+    };
 
     useEffect(() => {
         const fetchData = async () => {
@@ -21,6 +42,7 @@ const Files = () => {
                 if (!userData?.id) return; // Ensure userData and its id exist before fetching
                 const response = await FileService.getAllFiles(userData.id);
                 setFiles(response.data);
+                setFilteredFiles(response.data);
             } catch (error) {
                 console.error('Error fetching files:', error);
             } finally {
@@ -30,6 +52,19 @@ const Files = () => {
 
         fetchData();
     }, [userData?.id]);
+
+    // Filter files based on search query
+    useEffect(() => {
+        if (searchQuery.trim() === '') {
+            setFilteredFiles(files);
+        } else {
+            const filtered = files.filter(file => 
+                file.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                file.file_type.toLowerCase().includes(searchQuery.toLowerCase())
+            );
+            setFilteredFiles(filtered);
+        }
+    }, [searchQuery, files]);
 
     const handleShareIconClick = (fileId) => {
         setShowModal(true);
@@ -45,7 +80,7 @@ const Files = () => {
 
         const senderAddress = localStorage.getItem('ethereum_address');
         if (!senderAddress) {
-            alert('Please connect your MetaMask wallet first!');
+            warning('Please connect your MetaMask wallet first!');
             return;
         }
 
@@ -56,6 +91,12 @@ const Files = () => {
             // 2. Trigger Blockchain Transaction via MetaMask
             console.log('Requesting MetaMask confirmation for sharing...');
             const { receipt, blockchainAccessId } = await BlockchainService.shareFile(shareInfo.recipient_address, sharingFileId);
+            
+            console.log('\n=== SHARE TRANSACTION DETAILS ===');
+            console.log('Receipt:', receipt);
+            console.log('Blockchain Access ID:', blockchainAccessId);
+            console.log('Type:', typeof blockchainAccessId);
+            console.log('================================\n');
             
             // 3. Record in Backend DB
             await FileService.recordShareTransaction(
@@ -70,10 +111,11 @@ const Files = () => {
                 blockchainAccessId
             );
 
-            alert('File shared successfully on blockchain!');
-        } catch (error) {
-            console.error('Error sharing file:', error.message);
-            alert('File sharing failed: ' + error.message);
+            success('File shared successfully on blockchain!');
+            refreshNotifications(); // Refresh notifications
+        } catch (err) {
+            console.error('Error sharing file:', err.message);
+            error('File sharing failed: ' + err.message);
         }
 
         handleCloseModal();
@@ -89,10 +131,10 @@ const Files = () => {
             try {
                 await FileService.deleteFile(file.id);
                 setFiles(prevFiles => prevFiles.filter(f => f.id !== file.id));
-                alert('File deleted successfully');
-            } catch (error) {
-                console.error('Error deleting file:', error.message);
-                alert('File deletion failed');
+                success('File deleted successfully');
+            } catch (err) {
+                console.error('Error deleting file:', err.message);
+                error('File deletion failed');
             }
         }
     };
@@ -138,7 +180,7 @@ const Files = () => {
                 </div>
                 <div className="flex items-center space-x-3">
                     <div className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 shadow-sm">
-                        {files?.length || 0} Files
+                        {filteredFiles?.length || 0} / {files?.length || 0} Files
                     </div>
                 </div>
             </div>
@@ -150,23 +192,36 @@ const Files = () => {
                 </div>
             ) : (
                 <>
-                    {!files || files.length === 0 ? (
+                    {!filteredFiles || filteredFiles.length === 0 ? (
                         <div className="bg-white rounded-[2.5rem] border-2 border-dashed border-slate-200 p-16 text-center">
                             <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center mx-auto mb-6 text-slate-300">
                                 <FontAwesomeIcon icon={faFolderOpen} className="text-4xl" />
                             </div>
-                            <h3 className="text-xl font-bold text-slate-800 mb-2">No files found</h3>
+                            <h3 className="text-xl font-bold text-slate-800 mb-2">
+                                {searchQuery ? 'No files match your search' : 'No files found'}
+                            </h3>
                             <p className="text-slate-500 mb-8 max-w-sm mx-auto font-medium">
-                                Your secure vault is empty. Upload your first file to the blockchain to get started!
+                                {searchQuery 
+                                    ? 'Try adjusting your search terms or clear the search.' 
+                                    : 'Your secure vault is empty. Upload your first file to the blockchain to get started!'}
                             </p>
-                            <Link to="/app/dashboard/upload" className="inline-flex items-center space-x-2 px-8 py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95">
-                                <FontAwesomeIcon icon={faPlus} />
-                                <span>Upload Now</span>
-                            </Link>
+                            {searchQuery ? (
+                                <button 
+                                    onClick={() => setSearchQuery('')}
+                                    className="inline-flex items-center space-x-2 px-8 py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95"
+                                >
+                                    <span>Clear Search</span>
+                                </button>
+                            ) : (
+                                <Link to="/app/dashboard/upload" className="inline-flex items-center space-x-2 px-8 py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95">
+                                    <FontAwesomeIcon icon={faPlus} />
+                                    <span>Upload Now</span>
+                                </Link>
+                            )}
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                            {files.map((file, index) => (
+                            {filteredFiles.map((file, index) => (
                                 <div key={index} className="group bg-white border border-slate-200 rounded-[2rem] p-5 card-hover relative overflow-hidden flex flex-col h-full">
                                     {/* Preview Area */}
                                     <div className="aspect-video w-full bg-slate-50 rounded-2xl mb-4 overflow-hidden relative group-hover:shadow-inner transition-shadow">

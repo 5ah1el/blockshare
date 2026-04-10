@@ -2,27 +2,45 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import FileService from '../../services/FileService';
 import BlockchainService from '../../services/BlockchainService';
+import { useToast } from '../../context/ToastContext';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faShareAlt, faFolder, faUserFriends, faHistory, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faShareAlt, faFolder, faUserFriends, faHistory, faTrash, faCheckCircle, faExclamationCircle } from '@fortawesome/free-solid-svg-icons';
 
 const MySharedFiles = () => {
   // State to store the list of shared files and loading status
   const [sharedFiles, setSharedFiles] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [revokeStatus, setRevokeStatus] = useState({ type: '', message: '' });
+  const { success, error, warning } = useToast();
   const userData = JSON.parse(localStorage.getItem('user'));
+  
+  // Helper to refresh notifications
+  const refreshNotifications = () => {
+    window.dispatchEvent(new Event('storage'));
+  };
 
   useEffect(() => {
     const fetchSharedFiles = async () => {
       try {
-        if (!userData?.id) return; // Ensure userData and its id exist before fetching
+        if (!userData?.id) {
+          setLoading(false);
+          return;
+        }
         // Set loading to true when fetching data
         setLoading(true);
         // Fetch shared files for the current user
         const response = await FileService.getSharedFiles(userData.id);
-        setSharedFiles(response.data);
+        // Check if response has data array or error
+        if (response && response.data && Array.isArray(response.data)) {
+          setSharedFiles(response.data);
+        } else {
+          // If API returns error message, set empty array
+          setSharedFiles([]);
+        }
       } catch (error) {
         console.error('Error fetching shared files:', error);
-        // Handle error
+        // Set empty array on error instead of crashing
+        setSharedFiles([]);
       } finally {
         // Set loading to false when data fetching is complete
         setLoading(false);
@@ -37,47 +55,78 @@ const MySharedFiles = () => {
   const revokeAccess = async (fileId, recipient_username) => {
     const senderAddress = localStorage.getItem('ethereum_address');
     if (!senderAddress) {
-        alert('Please connect your MetaMask wallet first!');
+        error('Please connect your MetaMask wallet first!');
         return;
     }
 
+    // Show confirmation via custom UI instead of window.confirm
+    const confirmRevoke = window.confirm(`Are you sure you want to revoke access for ${recipient_username}?\n\nThis action will be recorded on the blockchain.`);
+    if (!confirmRevoke) {
+      return;
+    }
+
     try {
+      setRevokeStatus({ type: '', message: '' });
+      
       // 1. Get revoke info from backend
       const revokeInfo = await FileService.revokeAccess(fileId, recipient_username);
       
+      console.log('Revoke info:', revokeInfo);
+      console.log('Blockchain access ID:', revokeInfo.blockchain_access_id);
+      
       // 2. Trigger Blockchain Transaction via MetaMask
+      let receipt;
+      
       if (revokeInfo.blockchain_access_id !== null && revokeInfo.blockchain_access_id !== undefined) {
-          console.log('Requesting MetaMask confirmation for revoking...');
-          const receipt = await BlockchainService.revokeAccess(revokeInfo.blockchain_access_id);
-          
-          // 3. Record in Backend DB
-          await FileService.recordRevokeTransaction(
-              userData.id,
-              fileId,
-              receipt.hash,
-              senderAddress,
-              revokeInfo.recipient_address,
-              revokeInfo.recipient_id
-          );
+          // Method 1: Revoke using stored blockchain ID
+          console.log('Revoking using blockchain access ID:', revokeInfo.blockchain_access_id);
+          receipt = await BlockchainService.revokeAccess(revokeInfo.blockchain_access_id);
       } else {
-          console.warn('No blockchain access ID found. Revoking locally only.');
-          // This handles legacy shares or cases where blockchain ID was not recorded
-          alert('Note: This share was created before the blockchain ID system was fully implemented. It will be removed from your list, but may remain on the blockchain.');
+          // Method 2: Revoke using file hash and recipient address (for old shares)
+          console.log('No blockchain ID found. Using revokeAccessByHash method...');
+          console.log('Recipient address:', revokeInfo.recipient_address);
+          console.log('File ID to get hash:', fileId);
           
-          // Still try to update DB active status to false using the service
-          await FileService.recordRevokeTransactionLocal(
-              userData.id,
-              fileId,
-              revokeInfo.recipient_id
+          // Get file hash from the file ID
+          const fileData = sharedFiles.find(f => f.file_id === fileId);
+          if (!fileData || !fileData.file_hash) {
+              error('Could not find file hash for this share. Cannot revoke on blockchain.');
+              return;
+          }
+          
+          console.log('File hash:', fileData.file_hash);
+          receipt = await BlockchainService.revokeAccessByHash(
+              revokeInfo.recipient_address,
+              fileData.file_hash
           );
       }
+      
+      // 3. Record in Backend DB
+      await FileService.recordRevokeTransaction(
+          userData.id,
+          fileId,
+          receipt.hash,
+          senderAddress,
+          revokeInfo.recipient_address,
+          revokeInfo.recipient_id
+      );
+      
+      setRevokeStatus({ 
+        type: 'success', 
+        message: `Access successfully revoked for ${recipient_username}! The transaction has been recorded on the blockchain.` 
+      });
+      success(`Access revoked for ${recipient_username} - Transaction recorded on blockchain!`);
+      refreshNotifications(); // Refresh notifications
 
-      alert('Access revoked successfully on blockchain');
+      // Remove from UI
       const updatedFiles = sharedFiles.filter(file => file.file_id !== fileId || file.recipient_username !== recipient_username);
       setSharedFiles(updatedFiles);
     } catch (error) {
-      alert('Error revoking access: ' + error.message);
-      console.error('Error revoking access:', error);
+      setRevokeStatus({ 
+        type: 'error', 
+        message: `Failed to revoke access: ${error.message}` 
+      });
+      error(`Failed to revoke access: ${error.message}`);
     }
   };
 
@@ -92,6 +141,27 @@ const MySharedFiles = () => {
                     {sharedFiles?.length || 0} Active Shares
                 </div>
             </div>
+
+            {/* Revoke Status Messages */}
+            {revokeStatus.message && (
+                <div className={`p-6 rounded-[2rem] text-sm font-bold flex items-center space-x-4 border animate-fade-in ${
+                    revokeStatus.type === 'success' 
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                        : 'bg-rose-50 text-rose-700 border-rose-200'
+                }`}>
+                    <FontAwesomeIcon 
+                        icon={revokeStatus.type === 'success' ? faCheckCircle : faExclamationCircle} 
+                        className="text-xl" 
+                    />
+                    <span className="flex-1">{revokeStatus.message}</span>
+                    <button 
+                        onClick={() => setRevokeStatus({ type: '', message: '' })}
+                        className="px-4 py-2 bg-white/50 hover:bg-white rounded-xl transition-all text-xs"
+                    >
+                        Dismiss
+                    </button>
+                </div>
+            )}
 
             {loading ? (
                 <div className="flex flex-col items-center justify-center py-20">

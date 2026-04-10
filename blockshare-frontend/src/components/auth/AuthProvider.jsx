@@ -113,20 +113,15 @@ export const AuthProvider = ({ children }) => {
 
   // Function to handle user logout
   const logout = async () => {
-    // Display a confirmation dialog before logging out
-    const confirmed = window.confirm('Are you sure you want to logout?');
-    
-    if (confirmed) {
-      // Clear user data, Ethereum address, and login status from local storage
-      localStorage.removeItem('user');
-      // localStorage.removeItem('ethereum_address');
-      localStorage.removeItem('isLoggedIn');
+    // Clear user data, Ethereum address, and login status from local storage
+    localStorage.removeItem('user');
+    // localStorage.removeItem('ethereum_address');
+    localStorage.removeItem('isLoggedIn');
 
-      // Update the user state, Ethereum address state, and login status state
-      setUser(null);
-      setEthereumAddress(null);
-      setIsLoggedIn(false);
-    }
+    // Update the user state, Ethereum address state, and login status state
+    setUser(null);
+    setEthereumAddress(null);
+    setIsLoggedIn(false);
   };
 
   // Value to be provided by the context
@@ -136,6 +131,7 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     ethereumAddress,
+    setEthereumAddress,
     connectMetaMask
   };
 

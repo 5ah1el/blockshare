@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import UserService from '../../services/UserService';
 import { useAuth } from '../auth/AuthProvider';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faGear, faWallet, faUser, faBell, faLock, faShieldAlt, faCheckCircle } from '@fortawesome/free-solid-svg-icons';
+import { faGear, faWallet, faUser, faBell, faLock, faShieldAlt, faCheckCircle, faUserCircle, faEnvelope, faCalendarAlt, faKey } from '@fortawesome/free-solid-svg-icons';
 
 export default function Setting() {
     const { user, ethereumAddress, setEthereumAddress } = useAuth();
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState({ type: '', message: '' });
+    const [activeTab, setActiveTab] = useState('profile'); // 'profile' or 'settings'
 
     const handleUpdateAddress = async () => {
         if (!window.ethereum) {
@@ -43,14 +44,117 @@ export default function Setting() {
     return (
         <div className="space-y-8 py-4">
             <div>
-                <h2 className="text-3xl font-black text-slate-800 tracking-tight">System Settings</h2>
-                <p className="text-slate-500 font-medium mt-1">Configure your account and blockchain preferences</p>
+                <h2 className="text-3xl font-black text-slate-800 tracking-tight">Settings</h2>
+                <p className="text-slate-500 font-medium mt-1">Manage your profile and account preferences</p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Profile Card */}
-                <div className="lg:col-span-2 space-y-8">
-                    <div className="bg-white rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 p-8 lg:p-10">
+            {/* Tab Navigation */}
+            <div className="flex space-x-2 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm w-fit">
+                <button
+                    onClick={() => setActiveTab('profile')}
+                    className={`px-6 py-3 rounded-xl font-bold text-sm transition-all ${
+                        activeTab === 'profile'
+                            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                            : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                >
+                    <FontAwesomeIcon icon={faUserCircle} className="mr-2" />
+                    Profile
+                </button>
+                <button
+                    onClick={() => setActiveTab('settings')}
+                    className={`px-6 py-3 rounded-xl font-bold text-sm transition-all ${
+                        activeTab === 'settings'
+                            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                            : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                >
+                    <FontAwesomeIcon icon={faGear} className="mr-2" />
+                    Settings
+                </button>
+            </div>
+
+            {/* Profile Tab */}
+            {activeTab === 'profile' && (
+                <div className="max-w-4xl space-y-8">
+                    {/* Profile Header Card */}
+                    <div className="bg-white rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
+                        <div className="relative h-48 bg-gradient-to-r from-blue-600 to-indigo-700">
+                            <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
+                            <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-64 h-64 bg-blue-400/20 rounded-full blur-3xl"></div>
+                        </div>
+
+                        <div className="relative -mt-24 px-8 pb-8">
+                            <div className="flex flex-col md:flex-row items-center md:items-end space-y-6 md:space-y-0 md:space-x-8 mb-8">
+                                <div className="w-32 h-32 rounded-[2rem] bg-gradient-to-br from-slate-100 to-slate-200 p-1 shadow-lg">
+                                    <div className="w-full h-full rounded-[1.8rem] bg-white flex items-center justify-center overflow-hidden">
+                                        <FontAwesomeIcon icon={faUserCircle} className="text-7xl text-slate-300" />
+                                    </div>
+                                </div>
+                                <div className="text-center md:text-left pb-2">
+                                    <h2 className="text-4xl font-black text-slate-800 tracking-tight mb-2">{user?.username || 'User'}</h2>
+                                    <p className="text-slate-500 font-bold flex items-center justify-center md:justify-start">
+                                        <span className="w-2 h-2 bg-emerald-500 rounded-full mr-2"></span>
+                                        Verified Web3 User
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Email Address</p>
+                                    <div className="flex items-center space-x-3">
+                                        <FontAwesomeIcon icon={faEnvelope} className="text-slate-400" />
+                                        <p className="font-bold text-slate-700">{user?.email || '---'}</p>
+                                    </div>
+                                </div>
+
+                                <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Member Since</p>
+                                    <div className="flex items-center space-x-3">
+                                        <FontAwesomeIcon icon={faCalendarAlt} className="text-slate-400" />
+                                        <p className="font-bold text-slate-700">April 2026</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Security Card */}
+                    <div className="bg-slate-900 rounded-[2.5rem] p-8 lg:p-10 text-white relative overflow-hidden">
+                        <div className="relative z-10">
+                            <div className="flex items-center space-x-4 mb-6">
+                                <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center">
+                                    <FontAwesomeIcon icon={faShieldAlt} className="text-xl text-blue-400" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-bold">Platform Security</h3>
+                                    <p className="text-slate-400 text-sm font-medium">Your data is protected</p>
+                                </div>
+                            </div>
+                            <p className="text-sm text-slate-400 font-medium mb-6 leading-relaxed">
+                                Your account is protected by decentralized identity protocols. No private keys are stored on our servers.
+                            </p>
+                            <div className="flex items-center space-x-3 mb-6">
+                                <div className="px-3 py-1 bg-blue-500/20 rounded-full border border-blue-500/30 text-[10px] font-black tracking-widest uppercase">
+                                    AES-256
+                                </div>
+                                <div className="px-3 py-1 bg-indigo-500/20 rounded-full border border-indigo-500/30 text-[10px] font-black tracking-widest uppercase">
+                                    ECDSA
+                                </div>
+                            </div>
+                        </div>
+                        <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-blue-500/10 rounded-full blur-3xl"></div>
+                    </div>
+                </div>
+            )}
+
+            {/* Settings Tab */}
+            {activeTab === 'settings' && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="lg:col-span-2 space-y-8">
+                        {/* Web3 Connectivity Card */}
+                        <div className="bg-white rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 p-8 lg:p-10">
                         <div className="flex items-center space-x-4 mb-8">
                             <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
                                 <FontAwesomeIcon icon={faUser} className="text-xl" />
@@ -172,6 +276,7 @@ export default function Setting() {
                     </div>
                 </div>
             </div>
+            )}
         </div>
     );
 }

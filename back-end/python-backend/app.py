@@ -238,6 +238,7 @@ def record_transaction():
 @app.route('/api/record-revoke-transaction-local', methods=['POST'])
 def record_revoke_transaction_local():
     try:
+        db.create_all()
         data = request.json
         userId = data.get('userId')
         fileId = data.get('fileId')
@@ -246,10 +247,35 @@ def record_revoke_transaction_local():
         access_control = AccessControl.query.filter_by(file_id=fileId, recipientUserId=recipientId, active=True).first()
         if access_control:
             access_control.active = False
+            
+            # Also create a BlockchainRecord for local revokes so they show in Recent Activities
+            myfiledata = File.query.filter_by(id=fileId).first()
+            recipient_user = User.query.filter_by(id=recipientId).first()
+            
+            if myfiledata and recipient_user:
+                blockchain_record = BlockchainRecord(
+                    file_id=myfiledata.file_hash, 
+                    user_id=userId, 
+                    transaction_hash=f"local_revoke_{fileId}_{recipientId}_{int(datetime.utcnow().timestamp())}",
+                    from_address='Local', 
+                    to_address='Local', 
+                    block_number=0, 
+                    gas_used=0, 
+                    status='Success', 
+                    balance_eth='0', 
+                    action=f"You revoked access to {recipient_user.username}", 
+                    miner='Local'
+                )
+                
+                db.session.add(blockchain_record)
+            
             db.session.commit()
             return jsonify({'message': 'Access revoked locally'}), 200
         return jsonify({'error': 'No active share found'}), 404
     except Exception as e:
+        print(f"Error recording local revoke: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/getfiles/<string:user_id>', methods=['GET'])
@@ -398,6 +424,12 @@ def record_share_transaction():
         file_id = data.get('file_id')
         access_level = data.get('accessLevel')
         blockchain_access_id = data.get('blockchainAccessId')
+        
+        print(f"\n{'='*50}")
+        print(f"BLOCKCHAIN ACCESS ID RECEIVED: {blockchain_access_id}")
+        print(f"Type: {type(blockchain_access_id)}")
+        print(f"All data keys: {list(data.keys())}")
+        print(f"{'='*50}\n")
         
         if not all([userId, file_hash, tx_hash, sender_address, recipient_address, recipient_id, file_id, access_level]):
             return jsonify({'error': 'Missing required share transaction data'}), 400
@@ -600,8 +632,9 @@ def record_revoke_transaction():
         # Get transaction receipt using the hash
         tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
         
-        # Get balance and block data
-        balance_wei = w3.eth.get_balance(sender_address)
+        # Get balance and block data - Convert to checksum address first
+        checksum_sender = w3.to_checksum_address(sender_address)
+        balance_wei = w3.eth.get_balance(checksum_sender)
         balance_eth = str(w3.from_wei(balance_wei, 'ether'))
         block_data = w3.eth.get_block(tx_receipt.blockNumber)
         

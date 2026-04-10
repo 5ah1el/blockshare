@@ -16,12 +16,23 @@ const SharedWithMe = () => {
   useEffect(() => {
     const fetchSharedWithMe = async () => {
       try {
-        if (!userData?.id) return;
+        if (!userData?.id) {
+          setLoading(false);
+          return;
+        }
         setLoading(true);
         const response = await FileService.getSharedWithMe(userData.id);
-        setSharedFiles(response.data);
+        // Check if response has data array or error
+        if (response && response.data && Array.isArray(response.data)) {
+          setSharedFiles(response.data);
+        } else {
+          // If API returns error message, set empty array
+          setSharedFiles([]);
+        }
       } catch (error) {
         console.error('Error fetching files shared with me:', error);
+        // Set empty array on error instead of crashing
+        setSharedFiles([]);
         setError('Error fetching shared files');
       } finally {
         setLoading(false);

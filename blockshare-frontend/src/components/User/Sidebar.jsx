@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faFileUpload, faShareAlt, faDownload, faHistory, faFolder, faUserFriends, faHomeUser, faPlus, faImages, faGear, faUserEdit, faCloud } from '@fortawesome/free-solid-svg-icons';
+import { faFileUpload, faShareAlt, faDownload, faHistory, faFolder, faUserFriends, faHomeUser, faPlus, faImages, faUser, faUserEdit, faCloud, faReceipt } from '@fortawesome/free-solid-svg-icons';
 
 const Sidebar = () => {
   const location = useLocation();
@@ -13,9 +13,8 @@ const Sidebar = () => {
     { path: '/app/dashboard/my-shared-files', icon: faShareAlt, label: 'Shared Files' },
     { path: '/app/dashboard/shared-with-me', icon: faUserFriends, label: 'Shared with Me' },
     { path: '/app/dashboard/recent', icon: faHistory, label: 'Recent' },
-    { path: '/app/dashboard/transaction', icon: faHistory, label: 'Transactions' },
-    { path: '/app/dashboard/settings', icon: faGear, label: 'Settings' },
-    { path: '/app/dashboard/profile', icon: faUserEdit, label: 'Profile' },
+    { path: '/app/dashboard/transaction', icon: faReceipt, label: 'Transactions' },
+    { path: '/app/dashboard/profile', icon: faUser, label: 'Profile' },
   ];
 
   return (
@@ -59,20 +58,11 @@ const Sidebar = () => {
         })}
       </nav>
 
+      {/* Footer */}
       <div className="p-4 mt-auto">
-        <div className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700/50">
-          <div className="flex items-center space-x-3 mb-3">
-            <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs text-slate-300">
-              <FontAwesomeIcon icon={faCloud} />
-            </div>
-            <div className="text-xs">
-              <p className="text-slate-300 font-medium">Storage Used</p>
-              <p className="text-slate-500">75% of 1GB</p>
-            </div>
-          </div>
-          <div className="w-full bg-slate-700 rounded-full h-1.5">
-            <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: '75%' }}></div>
-          </div>
+        <div className="text-center text-xs text-slate-600 font-medium">
+          <p>BlockShare v1.0</p>
+          <p className="mt-1">Group no. 33</p>
         </div>
       </div>
     </div>
