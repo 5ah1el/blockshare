@@ -1,15 +1,3 @@
-[ USER LAYER ] <--------> [ WEB3 INTERFACE (React.js) ] <--------> [ METAMASK WALLET ]
-                                     |
-                                     | (API / JSON-RPC)
-                                     v
-[ BACKEND LAYER ] <-----> [ IPFS STORAGE ] <-----> [ BLOCKCHAIN LAYER (Ethereum) ]
-(Python / Flask)          (Decentralized)           (Smart Contracts)
-       |                         |                          |
-       v                         v                          v
-[ LOCAL DATABASE ]        [ ENCRYPTED DATA ]         [ ACCESS LEDGER ]
-   (SQLite)                  (AES-256)                 (Immutable)# Blockchain-Based Cloud File Sharing Application
-
-
 This project aims to develop a cloud file sharing application utilizing blockchain technology. The application consists of backend services implemented in Python using Flask framework, a blockchain backend developed in Hardhat, and a frontend interface built with React Vite.
 
 ## Table of Contents
